@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: Daniel Schaefer 2023 for Framework Computer
-# SPDX-FileCopyrightText: Modified by Raul Martinez 2025
 # SPDX-License-Identifier: MIT
 #
 # Handle button pressed on the macropad
-# Exchange configuration and messages with local computer daemon
-
+# Send A-X key pressed
+# The pressed button will light up, cycling through RGB colors
 import time
 import board
 import busio
@@ -43,15 +42,9 @@ MATRIX_LED_MAP = {
     "f1" : 7,   "f2" : 43,  "f3" : 46,  "f4" : 10
 }
 
-SYMBOLS = {}    # Will be provided by counterpart daemon in host
-
-config_path = '.'
-
-
+SYMBOLS = {}
 MATRIX_COLORS = {}
 MATRIX_COMMANDS = {}
-
-
 
 keyboard = Keyboard(usb_hid.devices)
 
@@ -78,23 +71,11 @@ kso_pins = [
     digitalio.DigitalInOut(x)
     for x in [
         # KSO0 - KSO7 for Keyboards and Numpad
-        board.KSO0,
-        board.KSO1,
-        board.KSO2,
-        board.KSO3,
-        board.KSO4,
-        board.KSO5,
-        board.KSO6,
-        board.KSO7,
+        board.KSO0,     board.KSO1,     board.KSO2,     board.KSO3,
+        board.KSO4,     board.KSO5,     board.KSO6,     board.KSO7,
         # KSO8 - KSO15 for Keyboards only
-        board.KSO8,
-        board.KSO9,
-        board.KSO10,
-        board.KSO11,
-        board.KSO12,
-        board.KSO13,
-        board.KSO14,
-        board.KSO15,
+        board.KSO8,     board.KSO9,     board.KSO10,    board.KSO11,
+        board.KSO12,    board.KSO13,    board.KSO14,    board.KSO15
     ]
 ]
 for kso in kso_pins:
@@ -144,6 +125,8 @@ sleep_pin = digitalio.DigitalInOut(board.GP0)
 sleep_pin.direction = digitalio.Direction.INPUT
 
 def matrix_paint():
+    global MATRIX_LED_MAP
+    global MATRIX_COLORS
     for key in MATRIX_LED_MAP.keys():
         value = MATRIX_COLORS.get(key,None)
         if value:
@@ -158,6 +141,7 @@ def matrix_paint():
 def process_key(key, is_pressed):
     global pressed
     global MATRIX_COMMANDS
+    global SYMBOLS
 
     if len(pressed)>1:
         key = "-".join(pressed)
@@ -210,16 +194,25 @@ def process_key(key, is_pressed):
         # Actually press and/or release the keys
         if key:
             ## Resolve key
-            key = SYMBOLS.get(key.upper(),None)
-            key_code = getattr(Keycode, key)
-            press and keyboard.press(key_code)
-            release and keyboard.release(key_code)
+            symbol = SYMBOLS.get(key.upper(),None)
+            if symbol:
+                key_code = getattr(Keycode, symbol)
+                if key_code:
+                    press and keyboard.press(key_code)
+                    release and keyboard.release(key_code)
+                else:
+                    print (f"Could not find code for {symbol}")
+            else:
+                print (f"Could not find key {key}")
 
     # Just in case    
     is_pressed or keyboard.release_all()
 
 def matrix_scan():
     global pressed
+    global MATRIX_COLS
+    global MATRIX_ROWS
+    global MATRIX
     for col in range(MATRIX_COLS):
         drive_col(col, 0)
         for row in range(MATRIX_ROWS):
@@ -236,55 +229,56 @@ def matrix_scan():
                         pressed.remove(key)
         drive_col(col, 1)
 
-last_voltage = [0]*32
-def matrix_check():
-    for col in range(MATRIX_COLS):
-        drive_col(col, 0)
-        for row in range(MATRIX_ROWS):
-            mux_select_row(row)
-            voltage = to_voltage(adc_in.value)
-            if abs(voltage - last_voltage[8*row + col]) > 1.5:
-                print (f"Voltage change on {row}/{col}: {voltage} {last_voltage[8*row + col]}")
-                last_voltage[8*row + col] = voltage
-        drive_col(col, 1)
-
-
-## Reset output pins
-for col in range(MATRIX_COLS):
-    drive_col(col, 1)
 
 def load_config(config):
     global MATRIX_COLORS
     global MATRIX_COMMANDS  
+    global SYMBOLS
     MATRIX_COLORS = config['colors']
     MATRIX_COMMANDS = config['keys']
     if config.get('symbols',None):
         SYMBOLS = config['symbols']
     matrix_paint()
 
-with open(config_path + '/default.json', 'r') as file:
-    load_config(json.load(file))
 
-try:
-    usb_serial = usb_cdc.data
-    usb_serial.flush()
-except Exception as e:
-    usb_serial = None
 
-#try:
+print ("Starting up")
 while True:
-    print ("Starting up")
+
+    ## Reset output pins
+    for col in range(MATRIX_COLS):
+        drive_col(col, 1)
+
+    try:
+        usb_serial = usb_cdc.data
+        usb_serial.flush()
+    except Exception as e:
+        usb_serial = None
+        print(f"Error: {e}")
+        
     while True:
-        is31.enable = sleep_pin.value
-        if sleep_pin.value:
-            time.sleep(0.01)
-            if usb_serial and usb_serial.in_waiting:
-                data = usb_serial.readline(-1).decode()
-                load_config(json.loads(data))
-            matrix_scan()
-            #matrix_check()
-        else:
+        try:
+            is31.enable = sleep_pin.value
+            if sleep_pin.value:
+                time.sleep(0.01)
+                if usb_serial and usb_serial.in_waiting:
+                    try:
+                        data = usb_serial.readline(-1).decode()
+                        load_config(json.loads(data))
+                    except Exception as e:
+                        print(f"Could not get config from serial {data}")
+                try:
+                    matrix_scan()
+                except Exception as e:
+                    print(f"Error: {e}")
+            else:
+                ## Sleep mode. will not scan for 5 more seconds
+                time.sleep(5)
+
+        except Exception as e:
+            print(f"Error: {e}")
+            traceback.print_exc()
+            keyboard.release_all()
+            print ("Will pause for 5 seconds and retry")
             time.sleep(5)
-#except Exception as e:
-    keyboard.release_all()
-    print(f"Error: {e}")
+
