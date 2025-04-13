@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: Daniel Schaefer 2023 for Framework Computer
+# SPDX-FileCopyrightText: Modified by Raul Martinez 2025
 # SPDX-License-Identifier: MIT
 #
 # Handle button pressed on the macropad
-# Send A-X key pressed
-# The pressed button will light up, cycling through RGB colors
+# Exchange configuration and messages with local computer daemon
+
 import time
 import board
 import busio
@@ -42,41 +43,7 @@ MATRIX_LED_MAP = {
     "f1" : 7,   "f2" : 43,  "f3" : 46,  "f4" : 10
 }
 
-SYMBOLS = {
-    "A": "A",   "B": "B",   "C": "C",   "D": "D",   "E": "E",
-    "F": "F",   "G": "G",   "H": "H",   "I": "I",   "J": "J",
-    "K": "K",   "L": "L",   "M": "M",   "N": "N",   "O": "O",
-    "P": "P",   "Q": "Q",   "R": "R",   "S": "S",   "T": "T",
-    "U": "U",   "V": "V",   "W": "W",   "X": "X",   "Y": "Y",
-    "Z": "Z",
-
-    " ": "SPACE",
-
-    "1": "ONE", "2": "TWO",     "3": "THREE",   "4": "FOUR",    "5": "FIVE",
-    "6": "SIX", "7": "SEVEN",   "8": "EIGHT",   "9": "NINE",    "0": "ZERO",
-
-    "-": "MINUS",   "=": "EQUALS",  "+": "EQUALS",  "/": "FORWARD_SLASH",
-
-    "\\": "BACKSLASH",
-
-    "[": "LEFT_BRACKET",    "]": "RIGHT_BRACKET",   "(": "NINE",    ")": "ZERO",
-
-    ";": "SEMICOLON",       "'": "QUOTE",       "`": "GRAVE_ACCENT",    "!": "ONE",
-    ",": "COMMA",           ".": "DOT",         "@":"TWO",              "#":"THREE",
-    "$":"FOUR",             "%":"FIVE",         "^":"SIX",              "&":"SEVEN",
-    "*":"EIGHT",            "_": "MINUS",       "{": "LEFT_BRACKET",    "}": "RIGHT_BRACKET",
-    ":": "SEMICOLON",       "\"": "QUOTE",      "<": "COMMA",           ">": "DOT",
-    "?": "FORWARD_SLASH",   "|": "BACKSLASH",
-
-    "\\N": "ENTER",         "\\E": "ESCAPE",        "\\T": "TAB",           "\\C": "LEFT_CONTROL",
-    "\\A": "LEFT_ALT",      "\\S": "LEFT_SHIFT",    "\\L": "CAPS_LOCK",     "\\W": "WINDOWS",
-
-    "\\U": "UP_ARROW",      "\\D": "DOWN_ARROW",    "\\L": "LEFT_ARROW",    "\\R": "RIGHT_ARROW",
-
-    "\\1": "F1",        "\\2": "F2",        "\\3": "F3",        "\\4": "F4",
-    "\\5": "F5",        "\\6": "F6",        "\\7": "F7",        "\\8": "F8",
-    "\\9": "F9",        "\\0": "F10"
-}
+SYMBOLS = {}    # Will be provided by counterpart daemon in host
 
 config_path = '.'
 
