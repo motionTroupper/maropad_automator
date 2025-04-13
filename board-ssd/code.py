@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: Daniel Schaefer 2023 for Framework Computer
+# SPDX-FileCopyrightText: Modified by Raul Martinez Zabala 2025
 # SPDX-License-Identifier: MIT
 #
 # Handle button pressed on the macropad
 # Send A-X key pressed
 # The pressed button will light up, cycling through RGB colors
+# === Standard and Library Imports ===
 import time
 import board
 import busio
@@ -18,14 +20,18 @@ import json
 import traceback
 
 
+
+# === Matrix and Threshold Configuration ===
 MATRIX_COLS = 8
 MATRIX_ROWS = 4 
 
 ADC_THRESHOLD = 0.4
 DEBUG = False
 
+# List of (being) pressed keys at each moment
 pressed = []
 
+# Matrix layout mapping logical keys to physical positions
 MATRIX = [
     ["f1", "b3", "c3", "d3", "e3", "f3", "b4", "d4"],
     ["f4", "a1", "a2", None, "a4", "b4", "e4", "f2"],
@@ -33,6 +39,7 @@ MATRIX = [
     [None, None, None, None, "a3", None, None, None]
 ]
 
+# Mapping from logical key names to LED controller indices
 MATRIX_LED_MAP = {
     "a1" : 40,  "a2" : 37,  "a3" : 52,  "a4" : 49,
     "b1" : 4,   "b2" : 1,   "b3" : 16,  "b4" : 13,
@@ -42,19 +49,27 @@ MATRIX_LED_MAP = {
     "f1" : 7,   "f2" : 43,  "f3" : 46,  "f4" : 10
 }
 
+
+# Key symbol mapping will be loaded from configuration
 SYMBOLS = {}
 MATRIX_COLORS = {}
 MATRIX_COMMANDS = {}
 
+
+# Initialize USB HID keyboard device
 keyboard = Keyboard(usb_hid.devices)
 
 # Set unused pins to input to avoid interfering. They're hooked up to rows 5 and 6
+
+# Configure unused pins as input to prevent interference
 gp6 = digitalio.DigitalInOut(board.GP6)
 gp6.direction = digitalio.Direction.INPUT
 gp7 = digitalio.DigitalInOut(board.GP7)
 gp7.direction = digitalio.Direction.INPUT
 
 # Set up analog MUX pins
+
+# Set up multiplexer control pins
 mux_enable = digitalio.DigitalInOut(board.MUX_ENABLE)
 mux_enable.direction = digitalio.Direction.OUTPUT
 mux_enable.value = False  # Low to enable it
@@ -67,6 +82,8 @@ mux_c.direction = digitalio.Direction.OUTPUT
 
 
 # Set up KSO pins
+
+# Define and configure column driver (KSO) pins for the key matrix
 kso_pins = [
     digitalio.DigitalInOut(x)
     for x in [
@@ -82,14 +99,20 @@ for kso in kso_pins:
     kso.direction = digitalio.Direction.OUTPUT
     kso.value = 1
 
+
+# Analog input used to read voltage from the key multiplexer
 adc_in = analogio.AnalogIn(board.GP28)
 
 # Signal boot done
+
+# Output pin signaling that boot has completed
 boot_done = digitalio.DigitalInOut(board.BOOT_DONE)
 boot_done.direction = digitalio.Direction.OUTPUT
 boot_done.value = False
 
 
+
+# === Multiplexer Helper Functions ===
 def mux_select_row(row):
     mux_a.value = row & 0x01
     mux_b.value = row & 0x02
@@ -104,10 +127,14 @@ def to_voltage(adc_sample):
     return (adc_sample * 3.3) / 65536
 
 # Enable LED controller via SDB pin
+
+# === LED Driver Initialization ===
 sdb = digitalio.DigitalInOut(board.GP29)
 sdb.direction = digitalio.Direction.OUTPUT
 sdb.value = True
 
+
+# Initialize I2C bus and scan to ensure LED controller is detected
 i2c = busio.I2C(board.SCL, board.SDA)  # Or board.I2C()
 
 # TODO: If I don't scan the bus, creating IS31FL3743 can't find the device. Why...?
@@ -115,29 +142,45 @@ i2c.try_lock()
 i2c.scan()
 i2c.unlock()
 
+
+# Initialize and configure IS31FL3743 LED controller
 is31 = IS31FL3743(i2c)
 is31.set_led_scaling(0x20)  # Brightness
 is31.global_current = 0x20  # Current 
 is31.enable = True
 
 # SLEEP# pin. Low if the host is sleeping
+
+# Input pin used to detect host sleep state
 sleep_pin = digitalio.DigitalInOut(board.GP0)
+
+# Input pin used to detect host sleep state
 sleep_pin.direction = digitalio.Direction.INPUT
 
+
+# === Update LED Colors Based on Configuration ===
 def matrix_paint():
+
+# Mapping from logical key names to LED controller indices
     global MATRIX_LED_MAP
     global MATRIX_COLORS
+
+# Mapping from logical key names to LED controller indices
     for key in MATRIX_LED_MAP.keys():
         value = MATRIX_COLORS.get(key,None)
         if value:
+            # Mapping from logical key names to LED controller indices
             is31[MATRIX_LED_MAP[key] +2 ] = int(value[:2],16)
             is31[MATRIX_LED_MAP[key] +1 ] = int(value[2:4],16)
             is31[MATRIX_LED_MAP[key] +0 ] = int(value[-2:],16)
         else:
+            # Setting LED to OFF
             is31[MATRIX_LED_MAP[key] +2 ] = 0x00
             is31[MATRIX_LED_MAP[key] +1 ] = 0x00
             is31[MATRIX_LED_MAP[key] +0 ] = 0x00
 
+
+# === Handle Key Press Logic ===
 def process_key(key, is_pressed):
     global pressed
     global MATRIX_COMMANDS
@@ -208,11 +251,17 @@ def process_key(key, is_pressed):
     # Just in case    
     is_pressed or keyboard.release_all()
 
+
+# === Scan Matrix and Detect Key Events ===
 def matrix_scan():
     global pressed
+
+# === Matrix and Threshold Configuration ===
     global MATRIX_COLS
     global MATRIX_ROWS
     global MATRIX
+
+# === Matrix and Threshold Configuration ===
     for col in range(MATRIX_COLS):
         drive_col(col, 0)
         for row in range(MATRIX_ROWS):
@@ -230,6 +279,8 @@ def matrix_scan():
         drive_col(col, 1)
 
 
+
+# === Load Key and LED Configuration from JSON ===
 def load_config(config):
     global MATRIX_COLORS
     global MATRIX_COMMANDS  
@@ -242,10 +293,14 @@ def load_config(config):
 
 
 
+
+# === Main Execution Loop ===
 print ("Starting up")
 while True:
 
     ## Reset output pins
+
+# === Matrix and Threshold Configuration ===
     for col in range(MATRIX_COLS):
         drive_col(col, 1)
 
@@ -258,7 +313,11 @@ while True:
         
     while True:
         try:
+
+# Input pin used to detect host sleep state
             is31.enable = sleep_pin.value
+
+# Input pin used to detect host sleep state
             if sleep_pin.value:
                 time.sleep(0.01)
                 if usb_serial and usb_serial.in_waiting:
